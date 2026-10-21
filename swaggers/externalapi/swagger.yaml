@@ -1,0 +1,754 @@
+openapi: 3.0.0
+info:
+    title: chat
+    version: 0.0.1
+servers:
+    - {}
+paths:
+    /api/v1/chat/messages:
+        get:
+            tags:
+                - ChatAPI
+            summary: История сообщений чата
+            description: 'Пагинация назад: before — sent_at,id последнего сообщения; legacy RFC3339 также принимается'
+            parameters:
+                - in: query
+                  name: chatID
+                  schema:
+                    type: string
+                    format: uuid
+                - in: query
+                  name: before
+                  schema:
+                    type: string
+                - in: query
+                  name: limit
+                  schema:
+                    type: number
+                    format: int
+                - in: cookie
+                  name: x-user-id
+                  required: true
+                  schema:
+                    type: string
+                    format: uuid
+            responses:
+                "200":
+                    description: Successful operation
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+                                properties:
+                                    additionalErrors:
+                                        type: object
+                                        nullable: true
+                                    data:
+                                        $ref: '#/components/schemas/models.SuccessData'
+                                    error:
+                                        type: boolean
+                                        example: false
+                                        description: Флаг показывающий, что ответ пришел с ошибкой
+                                    errorText:
+                                        type: string
+                "400":
+                    description: Bad Request
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+                                properties:
+                                    additionalErrors:
+                                        type: object
+                                        example:
+                                            field: chatID
+                                        description: Текст ошибки, при ответе
+                                        additionalProperties:
+                                            type: string
+                                    data: {}
+                                    error:
+                                        type: boolean
+                                        example: true
+                                        description: Флаг показывающий, что ответ пришел с ошибкой
+                                    errorText:
+                                        type: string
+                                        example: chat.errors.badRequest
+                                        description: Заголовок ошибки
+                "401":
+                    description: Unauthorized
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+                                properties:
+                                    additionalErrors:
+                                        description: Текст ошибки, при ответе, со статус кодом 401, не указывается
+                                    data: {}
+                                    error:
+                                        type: boolean
+                                        example: true
+                                        description: Флаг показывающий, что ответ пришел с ошибкой
+                                    errorText:
+                                        type: string
+                                        example: chat.errors.unauthorized
+                                        description: Заголовок ошибки
+                "403":
+                    description: Forbidden
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+                                properties:
+                                    additionalErrors:
+                                        description: Текст ошибки, при ответе, со статус кодом 403, не указывается
+                                    data: {}
+                                    error:
+                                        type: boolean
+                                        example: true
+                                        description: Флаг показывающий, что ответ пришел с ошибкой
+                                    errorText:
+                                        type: string
+                                        example: chat.errors.forbidden
+                                        description: Заголовок ошибки
+                "500":
+                    description: Internal Server Error
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+                                properties:
+                                    additionalErrors:
+                                        description: Текст ошибки, при ответе, со статус кодом 403, не указывается
+                                    data: {}
+                                    error:
+                                        type: boolean
+                                        example: true
+                                        description: Флаг показывающий, что ответ пришел с ошибкой
+                                    errorText:
+                                        type: string
+                                        example: chat.errors.internalError
+                                        description: Заголовок ошибки
+    /api/v1/chat/queue:
+        get:
+            tags:
+                - ChatAPI
+            summary: Очередь support-чатов
+            description: Список всех чатов; доступен только сотрудникам с ролью Admin
+            parameters:
+                - in: query
+                  name: limit
+                  schema:
+                    type: number
+                    format: int
+                - in: query
+                  name: offset
+                  schema:
+                    type: number
+                    format: int
+                - in: cookie
+                  name: x-user-id
+                  required: true
+                  schema:
+                    type: string
+                    format: uuid
+            responses:
+                "200":
+                    description: Successful operation
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+                                properties:
+                                    additionalErrors:
+                                        type: object
+                                        nullable: true
+                                    data:
+                                        $ref: '#/components/schemas/models.SuccessData'
+                                    error:
+                                        type: boolean
+                                        example: false
+                                        description: Флаг показывающий, что ответ пришел с ошибкой
+                                    errorText:
+                                        type: string
+                "400":
+                    description: Bad Request
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+                                properties:
+                                    additionalErrors:
+                                        type: object
+                                        example:
+                                            field: chatID
+                                        description: Текст ошибки, при ответе
+                                        additionalProperties:
+                                            type: string
+                                    data: {}
+                                    error:
+                                        type: boolean
+                                        example: true
+                                        description: Флаг показывающий, что ответ пришел с ошибкой
+                                    errorText:
+                                        type: string
+                                        example: chat.errors.badRequest
+                                        description: Заголовок ошибки
+                "401":
+                    description: Unauthorized
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+                                properties:
+                                    additionalErrors:
+                                        description: Текст ошибки, при ответе, со статус кодом 401, не указывается
+                                    data: {}
+                                    error:
+                                        type: boolean
+                                        example: true
+                                        description: Флаг показывающий, что ответ пришел с ошибкой
+                                    errorText:
+                                        type: string
+                                        example: chat.errors.unauthorized
+                                        description: Заголовок ошибки
+                "403":
+                    description: Forbidden
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+                                properties:
+                                    additionalErrors:
+                                        description: Текст ошибки, при ответе, со статус кодом 403, не указывается
+                                    data: {}
+                                    error:
+                                        type: boolean
+                                        example: true
+                                        description: Флаг показывающий, что ответ пришел с ошибкой
+                                    errorText:
+                                        type: string
+                                        example: chat.errors.forbidden
+                                        description: Заголовок ошибки
+                "500":
+                    description: Internal Server Error
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+                                properties:
+                                    additionalErrors:
+                                        description: Текст ошибки, при ответе, со статус кодом 403, не указывается
+                                    data: {}
+                                    error:
+                                        type: boolean
+                                        example: true
+                                        description: Флаг показывающий, что ответ пришел с ошибкой
+                                    errorText:
+                                        type: string
+                                        example: chat.errors.internalError
+                                        description: Заголовок ошибки
+    /api/v1/chat/read:
+        post:
+            tags:
+                - ChatAPI
+            summary: Отметить чат прочитанным
+            description: Обновляет read-receipt вызывающего пользователя для чата
+            parameters:
+                - in: query
+                  name: chatID
+                  schema:
+                    type: string
+                    format: uuid
+                - in: cookie
+                  name: x-user-id
+                  required: true
+                  schema:
+                    type: string
+                    format: uuid
+            responses:
+                "200":
+                    description: Successful operation
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+                                properties:
+                                    additionalErrors:
+                                        type: object
+                                        nullable: true
+                                    data:
+                                        $ref: '#/components/schemas/models.SuccessData'
+                                    error:
+                                        type: boolean
+                                        example: false
+                                        description: Флаг показывающий, что ответ пришел с ошибкой
+                                    errorText:
+                                        type: string
+                "400":
+                    description: Bad Request
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+                                properties:
+                                    additionalErrors:
+                                        type: object
+                                        example:
+                                            field: chatID
+                                        description: Текст ошибки, при ответе
+                                        additionalProperties:
+                                            type: string
+                                    data: {}
+                                    error:
+                                        type: boolean
+                                        example: true
+                                        description: Флаг показывающий, что ответ пришел с ошибкой
+                                    errorText:
+                                        type: string
+                                        example: chat.errors.badRequest
+                                        description: Заголовок ошибки
+                "401":
+                    description: Unauthorized
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+                                properties:
+                                    additionalErrors:
+                                        description: Текст ошибки, при ответе, со статус кодом 401, не указывается
+                                    data: {}
+                                    error:
+                                        type: boolean
+                                        example: true
+                                        description: Флаг показывающий, что ответ пришел с ошибкой
+                                    errorText:
+                                        type: string
+                                        example: chat.errors.unauthorized
+                                        description: Заголовок ошибки
+                "403":
+                    description: Forbidden
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+                                properties:
+                                    additionalErrors:
+                                        description: Текст ошибки, при ответе, со статус кодом 403, не указывается
+                                    data: {}
+                                    error:
+                                        type: boolean
+                                        example: true
+                                        description: Флаг показывающий, что ответ пришел с ошибкой
+                                    errorText:
+                                        type: string
+                                        example: chat.errors.forbidden
+                                        description: Заголовок ошибки
+                "500":
+                    description: Internal Server Error
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+                                properties:
+                                    additionalErrors:
+                                        description: Текст ошибки, при ответе, со статус кодом 403, не указывается
+                                    data: {}
+                                    error:
+                                        type: boolean
+                                        example: true
+                                        description: Флаг показывающий, что ответ пришел с ошибкой
+                                    errorText:
+                                        type: string
+                                        example: chat.errors.internalError
+                                        description: Заголовок ошибки
+    /api/v1/chat/stage:
+        post:
+            tags:
+                - ChatAPI
+            summary: Переключение стадии диалога бот/оператор
+            description: 'stage: "operator" — сразу глушит бота (оператор подключается к диалогу), "bot" — возвращает диалог боту. Доступ: владелец чата или роль Admin'
+            parameters:
+                - in: query
+                  name: chatID
+                  schema:
+                    type: string
+                    format: uuid
+                - in: query
+                  name: stage
+                  schema:
+                    type: string
+                - in: cookie
+                  name: x-user-id
+                  required: true
+                  schema:
+                    type: string
+                    format: uuid
+            responses:
+                "200":
+                    description: Successful operation
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+                                properties:
+                                    additionalErrors:
+                                        type: object
+                                        nullable: true
+                                    data:
+                                        $ref: '#/components/schemas/models.SuccessData'
+                                    error:
+                                        type: boolean
+                                        example: false
+                                        description: Флаг показывающий, что ответ пришел с ошибкой
+                                    errorText:
+                                        type: string
+                "400":
+                    description: Bad Request
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+                                properties:
+                                    additionalErrors:
+                                        type: object
+                                        example:
+                                            field: chatID
+                                        description: Текст ошибки, при ответе
+                                        additionalProperties:
+                                            type: string
+                                    data: {}
+                                    error:
+                                        type: boolean
+                                        example: true
+                                        description: Флаг показывающий, что ответ пришел с ошибкой
+                                    errorText:
+                                        type: string
+                                        example: chat.errors.badRequest
+                                        description: Заголовок ошибки
+                "401":
+                    description: Unauthorized
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+                                properties:
+                                    additionalErrors:
+                                        description: Текст ошибки, при ответе, со статус кодом 401, не указывается
+                                    data: {}
+                                    error:
+                                        type: boolean
+                                        example: true
+                                        description: Флаг показывающий, что ответ пришел с ошибкой
+                                    errorText:
+                                        type: string
+                                        example: chat.errors.unauthorized
+                                        description: Заголовок ошибки
+                "403":
+                    description: Forbidden
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+                                properties:
+                                    additionalErrors:
+                                        description: Текст ошибки, при ответе, со статус кодом 403, не указывается
+                                    data: {}
+                                    error:
+                                        type: boolean
+                                        example: true
+                                        description: Флаг показывающий, что ответ пришел с ошибкой
+                                    errorText:
+                                        type: string
+                                        example: chat.errors.forbidden
+                                        description: Заголовок ошибки
+                "500":
+                    description: Internal Server Error
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+                                properties:
+                                    additionalErrors:
+                                        description: Текст ошибки, при ответе, со статус кодом 403, не указывается
+                                    data: {}
+                                    error:
+                                        type: boolean
+                                        example: true
+                                        description: Флаг показывающий, что ответ пришел с ошибкой
+                                    errorText:
+                                        type: string
+                                        example: chat.errors.internalError
+                                        description: Заголовок ошибки
+    /api/v1/chat/support:
+        post:
+            tags:
+                - ChatAPI
+            summary: Получение своего чата с поддержкой
+            description: Возвращает единственный support-чат пользователя, создавая его при первом обращении
+            parameters:
+                - in: cookie
+                  name: x-user-id
+                  required: true
+                  schema:
+                    type: string
+                    format: uuid
+            responses:
+                "200":
+                    description: Successful operation
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+                                properties:
+                                    additionalErrors:
+                                        type: object
+                                        nullable: true
+                                    data:
+                                        $ref: '#/components/schemas/models.SuccessData'
+                                    error:
+                                        type: boolean
+                                        example: false
+                                        description: Флаг показывающий, что ответ пришел с ошибкой
+                                    errorText:
+                                        type: string
+                "400":
+                    description: Bad Request
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+                                properties:
+                                    additionalErrors:
+                                        type: object
+                                        example:
+                                            field: chatID
+                                        description: Текст ошибки, при ответе
+                                        additionalProperties:
+                                            type: string
+                                    data: {}
+                                    error:
+                                        type: boolean
+                                        example: true
+                                        description: Флаг показывающий, что ответ пришел с ошибкой
+                                    errorText:
+                                        type: string
+                                        example: chat.errors.badRequest
+                                        description: Заголовок ошибки
+                "401":
+                    description: Unauthorized
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+                                properties:
+                                    additionalErrors:
+                                        description: Текст ошибки, при ответе, со статус кодом 401, не указывается
+                                    data: {}
+                                    error:
+                                        type: boolean
+                                        example: true
+                                        description: Флаг показывающий, что ответ пришел с ошибкой
+                                    errorText:
+                                        type: string
+                                        example: chat.errors.unauthorized
+                                        description: Заголовок ошибки
+                "403":
+                    description: Forbidden
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+                                properties:
+                                    additionalErrors:
+                                        description: Текст ошибки, при ответе, со статус кодом 403, не указывается
+                                    data: {}
+                                    error:
+                                        type: boolean
+                                        example: true
+                                        description: Флаг показывающий, что ответ пришел с ошибкой
+                                    errorText:
+                                        type: string
+                                        example: chat.errors.forbidden
+                                        description: Заголовок ошибки
+                "500":
+                    description: Internal Server Error
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+                                properties:
+                                    additionalErrors:
+                                        description: Текст ошибки, при ответе, со статус кодом 403, не указывается
+                                    data: {}
+                                    error:
+                                        type: boolean
+                                        example: true
+                                        description: Флаг показывающий, что ответ пришел с ошибкой
+                                    errorText:
+                                        type: string
+                                        example: chat.errors.internalError
+                                        description: Заголовок ошибки
+components:
+    schemas:
+        models.Chat:
+            type: object
+            properties:
+                botActive:
+                    type: boolean
+                createdAt:
+                    type: string
+                    format: date-time
+                dialogStartedAt:
+                    oneOf:
+                        - type: string
+                          format: date-time
+                        - nullable: true
+                id:
+                    type: string
+                    format: uuid
+                ownerUserId:
+                    type: string
+                    format: uuid
+        models.ChatListItem:
+            type: object
+            properties:
+                Chat:
+                    $ref: '#/components/schemas/models.Chat'
+                lastMessageAt:
+                    oneOf:
+                        - type: string
+                          format: date-time
+                        - nullable: true
+                lastMessageText:
+                    oneOf:
+                        - type: string
+                        - nullable: true
+                unread:
+                    type: number
+                    format: int
+        models.ChatListResponse:
+            type: object
+            properties:
+                chats:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/models.ChatListItem'
+                    nullable: true
+                hasNext:
+                    type: boolean
+        models.Message:
+            type: object
+            properties:
+                chatId:
+                    type: string
+                    format: uuid
+                id:
+                    type: string
+                    format: uuid
+                isSystem:
+                    type: boolean
+                senderId:
+                    type: string
+                    format: uuid
+                sentAt:
+                    type: string
+                    format: date-time
+                text:
+                    type: string
+        models.MessagesResponse:
+            type: object
+            properties:
+                hasNext:
+                    type: boolean
+                messages:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/models.Message'
+                    nullable: true
+        models.SuccessData:
+            type: object
+            properties:
+                bot_active:
+                    oneOf:
+                        - type: boolean
+                        - nullable: true
+                chats:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/models.ChatListItem'
+                    nullable: true
+                created_at:
+                    oneOf:
+                        - type: string
+                          format: date-time
+                        - nullable: true
+                dialog_started_at:
+                    oneOf:
+                        - type: string
+                          format: date-time
+                        - nullable: true
+                has_next:
+                    oneOf:
+                        - type: boolean
+                        - nullable: true
+                id:
+                    type: string
+                    format: uuid
+                messages:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/models.Message'
+                    nullable: true
+                owner_user_id:
+                    type: string
+                    format: uuid
+        requestChatAPIGetMessages:
+            type: object
+        requestChatAPIGetOrCreateSupportChat:
+            type: object
+        requestChatAPIListSupportQueue:
+            type: object
+        requestChatAPIMarkRead:
+            type: object
+        requestChatAPISetChatStage:
+            type: object
+        responseChatAPIGetMessages:
+            type: object
+            required:
+                - data
+            properties:
+                data:
+                    $ref: '#/components/schemas/models.MessagesResponse'
+            description: 'Пагинация назад: before — sent_at,id последнего сообщения; legacy RFC3339 также принимается'
+        responseChatAPIGetOrCreateSupportChat:
+            type: object
+            required:
+                - data
+            properties:
+                data:
+                    $ref: '#/components/schemas/models.Chat'
+            description: Возвращает единственный support-чат пользователя, создавая его при первом обращении
+        responseChatAPIListSupportQueue:
+            type: object
+            required:
+                - data
+            properties:
+                data:
+                    $ref: '#/components/schemas/models.ChatListResponse'
+            description: Список всех чатов; доступен только сотрудникам с ролью Admin
+        responseChatAPIMarkRead:
+            type: object
+            required:
+                - data
+            properties:
+                data:
+                    type: boolean
+            description: Обновляет read-receipt вызывающего пользователя для чата
+        responseChatAPISetChatStage:
+            type: object
+            required:
+                - data
+            properties:
+                data:
+                    $ref: '#/components/schemas/models.Chat'
+            description: 'stage: "operator" — сразу глушит бота (оператор подключается к диалогу), "bot" — возвращает диалог боту. Доступ: владелец чата или роль Admin'
