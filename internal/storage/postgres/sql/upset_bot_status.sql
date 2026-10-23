@@ -1,0 +1,1 @@
+UPDATE chats SET bot_active = $2 WHERE id = $1;

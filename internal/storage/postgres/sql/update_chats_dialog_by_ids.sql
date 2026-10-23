@@ -1,0 +1,1 @@
+UPDATE chats SET dialog_started_at = NULL, bot_active = true WHERE id = ANY($1::uuid[]);
