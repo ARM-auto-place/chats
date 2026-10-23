@@ -5,16 +5,11 @@ import (
 	"encoding/json"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/rs/zerolog"
 
+	"github.com/ARM-auto-place/chats/internal/storage/postgres"
 	"github.com/ARM-auto-place/chats/pkg/models"
 )
-
-// CleanupStorage is the subset of Storage the cleanup worker needs.
-type CleanupStorage interface {
-	CleanupExpiredDialogs(ctx context.Context) ([]uuid.UUID, error)
-}
 
 // CleanupWorker periodically wipes message history for chats whose dialog
 // started more than 24h ago (see the design spec's "Автоочистка и статус
@@ -23,13 +18,13 @@ type CleanupStorage interface {
 // to true here — without this, the frontend would only find out on its next
 // poll.
 type CleanupWorker struct {
-	storage  CleanupStorage
+	storage  postgres.Storage
 	logger   zerolog.Logger
 	interval time.Duration
 	hub      Broadcaster // nil is fine: broadcasts are then just skipped.
 }
 
-func NewCleanupWorker(storage CleanupStorage, logger zerolog.Logger, interval time.Duration, hub Broadcaster) *CleanupWorker {
+func NewCleanupWorker(storage postgres.Storage, logger zerolog.Logger, interval time.Duration, hub Broadcaster) *CleanupWorker {
 	return &CleanupWorker{storage: storage, logger: logger, interval: interval, hub: hub}
 }
 

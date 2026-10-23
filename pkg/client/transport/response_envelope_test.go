@@ -17,11 +17,11 @@ func TestGeneratedClientDecodesAMCDataEnvelope(t *testing.T) {
 		w.Header().Set("Content-Type", "application/json")
 		switch r.URL.Path {
 		case "/api/v1/chat/support":
-			_, _ = fmt.Fprintf(w, `{"data":{"id":%q,"owner_user_id":%q,"dialog_started_at":null,"bot_active":true,"created_at":"2026-09-14T10:00:00Z"},"error":false,"errorText":"","additionalErrors":{}}`, chatID, ownerID)
+			_, _ = fmt.Fprintf(w, `{"data":{"id":%q,"userId":%q,"dialogStartedAt":null,"botActive":true,"createdAt":"2026-09-14T10:00:00Z"},"error":false,"errorText":"","additionalErrors":{}}`, chatID, ownerID)
 		case "/api/v1/chat/queue":
-			_, _ = fmt.Fprint(w, `{"data":{"chats":[],"has_next":false},"error":false,"errorText":"","additionalErrors":{}}`)
+			_, _ = fmt.Fprint(w, `{"data":{"chats":[],"hasNext":false},"error":false,"errorText":"","additionalErrors":{}}`)
 		case "/api/v1/chat/messages":
-			_, _ = fmt.Fprint(w, `{"data":{"messages":[],"has_next":true},"error":false,"errorText":"","additionalErrors":{}}`)
+			_, _ = fmt.Fprint(w, `{"data":{"messages":[],"hasNext":true},"error":false,"errorText":"","additionalErrors":{}}`)
 		case "/api/v1/chat/read":
 			_, _ = fmt.Fprint(w, `{"data":true,"error":false,"errorText":"","additionalErrors":{}}`)
 		}

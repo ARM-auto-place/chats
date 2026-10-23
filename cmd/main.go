@@ -87,7 +87,7 @@ func main() {
 
 	<-shutdown
 	cleanupCancel()
-	// CloseAll до hubCancel: закрытие клиента шлёт unregister координатору хаба.
+
 	hub.CloseAll()
 	hubCancel()
 	if err = healthServer.Stop(); err != nil {

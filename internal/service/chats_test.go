@@ -35,6 +35,9 @@ type fakeStorage struct {
 	setBotActiveCalls []bool
 	systemMessages    []string
 	systemMessageErr  error
+	cleanupCalls      int
+	cleanupIDs        []uuid.UUID
+	cleanupErr        error
 }
 
 func (f *fakeStorage) GetOrCreateChatByOwner(context.Context, uuid.UUID) (internalModels.ChatRow, error) {
@@ -68,6 +71,10 @@ func (f *fakeStorage) ListMessages(_ context.Context, _ uuid.UUID, cursor *inter
 func (f *fakeStorage) InsertSystemMessage(_ context.Context, _ uuid.UUID, _ uuid.UUID, text string) (internalModels.MessageRow, error) {
 	f.systemMessages = append(f.systemMessages, text)
 	return internalModels.MessageRow{Text: text, IsSystem: true}, f.systemMessageErr
+}
+func (f *fakeStorage) CleanupExpiredDialogs(context.Context) ([]uuid.UUID, error) {
+	f.cleanupCalls++
+	return f.cleanupIDs, f.cleanupErr
 }
 
 func TestListSupportQueue_NegativeOffsetRejected(t *testing.T) {

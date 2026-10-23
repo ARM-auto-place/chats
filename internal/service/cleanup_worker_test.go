@@ -12,30 +12,19 @@ import (
 	"github.com/ARM-auto-place/chats/pkg/models"
 )
 
-type fakeCleanupStorage struct {
-	calls int
-	ids   []uuid.UUID
-	err   error
-}
-
-func (f *fakeCleanupStorage) CleanupExpiredDialogs(context.Context) ([]uuid.UUID, error) {
-	f.calls++
-	return f.ids, f.err
-}
-
 func TestCleanupWorker_Tick_CallsStorage(t *testing.T) {
-	storage := &fakeCleanupStorage{ids: []uuid.UUID{uuid.New(), uuid.New(), uuid.New()}}
+	storage := &fakeStorage{cleanupIDs: []uuid.UUID{uuid.New(), uuid.New(), uuid.New()}}
 	w := NewCleanupWorker(storage, zerolog.Nop(), 0, nil)
 
 	w.tick(context.Background())
 
-	if storage.calls != 1 {
-		t.Fatalf("expected 1 call, got %d", storage.calls)
+	if storage.cleanupCalls != 1 {
+		t.Fatalf("expected 1 call, got %d", storage.cleanupCalls)
 	}
 }
 
 func TestCleanupWorker_Tick_LogsErrorWithoutPanicking(t *testing.T) {
-	storage := &fakeCleanupStorage{err: errors.New("db down")}
+	storage := &fakeStorage{cleanupErr: errors.New("db down")}
 	w := NewCleanupWorker(storage, zerolog.Nop(), 0, nil)
 
 	w.tick(context.Background()) // must not panic
@@ -43,7 +32,7 @@ func TestCleanupWorker_Tick_LogsErrorWithoutPanicking(t *testing.T) {
 
 func TestCleanupWorker_Tick_BroadcastsStageChangedPerResetChat(t *testing.T) {
 	chatID := uuid.New()
-	storage := &fakeCleanupStorage{ids: []uuid.UUID{chatID}}
+	storage := &fakeStorage{cleanupIDs: []uuid.UUID{chatID}}
 	hub := &fakeBroadcaster{}
 	w := NewCleanupWorker(storage, zerolog.Nop(), 0, hub)
 

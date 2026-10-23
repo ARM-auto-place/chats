@@ -19,8 +19,8 @@ func TestWSOutgoing_MarshalJSON_OmitsNilChatID(t *testing.T) {
 	if err = json.Unmarshal(data, &decoded); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if _, present := decoded["chat_id"]; present {
-		t.Fatalf("expected chat_id to be omitted, got %s", data)
+	if _, present := decoded["chatId"]; present {
+		t.Fatalf("expected chatId to be omitted, got %s", data)
 	}
 }
 
@@ -37,7 +37,7 @@ func TestWSOutgoing_MarshalJSON_IncludesChatID(t *testing.T) {
 	if err = json.Unmarshal(data, &decoded); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if decoded["chat_id"] != chatID.String() {
-		t.Fatalf("expected chat_id %q, got %v", chatID.String(), decoded["chat_id"])
+	if decoded["chatId"] != chatID.String() {
+		t.Fatalf("expected chatId %q, got %v", chatID.String(), decoded["chatId"])
 	}
 }

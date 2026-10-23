@@ -22,6 +22,7 @@ type Storage interface {
 	InsertMessage(ctx context.Context, chatID uuid.UUID, senderID uuid.UUID, clientMsgID uuid.UUID, text string, isAdmin bool, isBot bool) (models.MessageRow, bool, error)
 	InsertSystemMessage(ctx context.Context, chatID uuid.UUID, senderID uuid.UUID, text string) (models.MessageRow, error)
 	ListMessages(ctx context.Context, chatID uuid.UUID, before *models.MessageCursor, limit int) ([]models.MessageRow, bool, error)
+	CleanupExpiredDialogs(ctx context.Context) ([]uuid.UUID, error)
 }
 type storage struct {
 	pool *pgxpool.Pool
