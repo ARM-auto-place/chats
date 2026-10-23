@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/rs/zerolog"
 
+	"github.com/ARM-auto-place/chats/internal/client"
 	chatService "github.com/ARM-auto-place/chats/internal/service"
 	"github.com/ARM-auto-place/chats/pkg/models"
 )
@@ -131,13 +132,13 @@ type Hub struct {
 	replayMu sync.Mutex
 	replay   map[uuid.UUID]*RingBuffer // chatID → ring buffer
 
-	accessClient chatService.AccessClient
+	accessClient client.AccessClient
 	logger       zerolog.Logger
 
 	done chan struct{} // закрывается, когда Run завершился
 }
 
-func NewHub(accessClient chatService.AccessClient, logger zerolog.Logger) *Hub {
+func NewHub(accessClient client.AccessClient, logger zerolog.Logger) *Hub {
 	shards := make([]*shard, max(ShardCount, 1))
 	for i := range shards {
 		shards[i] = newShard()

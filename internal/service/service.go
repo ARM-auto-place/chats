@@ -2,10 +2,13 @@ package service
 
 import (
 	"context"
+	"sync"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/rs/zerolog"
 
+	"github.com/ARM-auto-place/chats/internal/client"
 	customErrors "github.com/ARM-auto-place/chats/internal/errors"
 	"github.com/ARM-auto-place/chats/internal/storage/postgres"
 )
@@ -17,25 +20,6 @@ const (
 	maxMessagesLimit     = 100
 )
 
-// Storage is implemented by internal/storage/postgres.Storage.
-type Storage interface {
-	GetOrCreateChatByOwner(ctx context.Context, ownerUserID uuid.UUID) (postgres.ChatRow, error)
-	GetChatByID(ctx context.Context, chatID uuid.UUID) (postgres.ChatRow, bool, error)
-	ListQueue(ctx context.Context, viewerUserID uuid.UUID, limit int, offset int) ([]postgres.ChatListRow, int, error)
-	SetBotActive(ctx context.Context, chatID uuid.UUID, active bool) error
-	MarkOwnerRead(ctx context.Context, chatID uuid.UUID) error
-	UpsertParticipantRead(ctx context.Context, chatID uuid.UUID, userID uuid.UUID) error
-	InsertMessage(ctx context.Context, chatID uuid.UUID, senderID uuid.UUID, clientMsgID uuid.UUID, text string, isAdmin bool, isBot bool) (postgres.MessageRow, bool, error)
-	InsertSystemMessage(ctx context.Context, chatID uuid.UUID, senderID uuid.UUID, text string) (postgres.MessageRow, error)
-	ListMessages(ctx context.Context, chatID uuid.UUID, before *postgres.MessageCursor, limit int) ([]postgres.MessageRow, bool, error)
-}
-
-// AccessClient is implemented by back/access's generated HTTP client
-// (github.com/mbatimel/AMC/access/pkg/client/transport.ClientAccessAPI).
-type AccessClient interface {
-	CheckAccess(ctx context.Context, userID uuid.UUID, role int) (allowed bool, err error)
-}
-
 // Broadcaster fans a ready-made WS frame out to every live subscriber of a
 // chat. Implemented by internal/service/ws.Hub — declared here so this
 // package never imports the ws package (which itself depends on ChatBackend).
@@ -45,9 +29,13 @@ type Broadcaster interface {
 
 type service struct {
 	logger       zerolog.Logger
-	storage      Storage
-	accessClient AccessClient
+	storage      postgres.Storage
+	accessClient client.AccessClient
 	hub          Broadcaster
+
+	assistant        client.Assistant
+	assistantTimeout time.Duration
+	botReplies       sync.WaitGroup
 }
 
 // New returns the concrete *service type (not the externalapi.ChatAPI
@@ -59,8 +47,17 @@ type service struct {
 //
 // hub may be nil (tests that don't care about WS broadcasts pass nil) — any
 // code that broadcasts through it must guard the call.
-func New(logger zerolog.Logger, storage Storage, accessClient AccessClient, hub Broadcaster) *service {
+func New(logger zerolog.Logger, storage postgres.Storage, accessClient client.AccessClient, hub Broadcaster) *service {
 	return &service{logger: logger, storage: storage, accessClient: accessClient, hub: hub}
+}
+
+// WithAssistant enables bot replies: every new owner message in a chat with
+// bot_active = true is forwarded to the assistant and its answer is posted
+// back as BotUserID. Without it the bot stays silent.
+func (s *service) WithAssistant(a client.Assistant, timeout time.Duration) *service {
+	s.assistant = a
+	s.assistantTimeout = timeout
+	return s
 }
 
 func (s *service) isAdmin(ctx context.Context, userID uuid.UUID) (bool, error) {

@@ -11,18 +11,18 @@ import (
 	"github.com/rs/zerolog/log"
 	"github.com/valyala/fasthttp"
 
+	accessTransport "github.com/ARM-auto-place/access/pkg/client/transport"
+	"github.com/ARM-auto-place/chats/internal/client"
 	"github.com/ARM-auto-place/chats/internal/config"
 	chatService "github.com/ARM-auto-place/chats/internal/service"
 	"github.com/ARM-auto-place/chats/internal/service/ws"
 	postgres "github.com/ARM-auto-place/chats/internal/storage/postgres"
-	customHandlers "github.com/ARM-auto-place/chats/internal/transport/custom-handlers"
 	transportHttp "github.com/ARM-auto-place/chats/internal/transport/http"
 	"github.com/ARM-auto-place/chats/internal/transport/jsonRPC/externalapi"
-	accessTransport "github.com/mbatimel/AMC/access/pkg/client/transport"
 )
 
 const (
-	serviceName     = "chat-api"
+	serviceName     = "chat-service"
 	cleanupInterval = 5 * time.Minute
 )
 
@@ -46,6 +46,11 @@ func main() {
 	ws.Configure(cfg.WS)
 	hub := ws.NewHub(accessClient, log.Logger)
 	svc := chatService.New(log.Logger, postgresStorage, accessClient, hub)
+	if cfg.AssistantURL != "" {
+		svc.WithAssistant(client.NewClient(cfg.AssistantURL, cfg.AssistantTimeout), cfg.AssistantTimeout)
+	} else {
+		log.Warn().Msg("ASSISTANT_URL is not set, bot replies disabled")
+	}
 
 	hubCtx, hubCancel := context.WithCancel(context.Background())
 	defer hubCancel()
@@ -57,7 +62,6 @@ func main() {
 	go cleanupWorker.Run(cleanupCtx)
 
 	app := externalapi.New(log.Logger,
-		externalapi.Use(customHandlers.ValidateChatRequest),
 		externalapi.ChatAPI(externalapi.NewChatAPI(svc)),
 	).WithLog().WithMetrics()
 	ws.RegisterRoute(app.Fiber(), hub, svc, accessClient)

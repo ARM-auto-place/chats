@@ -33,7 +33,7 @@ func TestGeneratedClientDecodesAMCDataEnvelope(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if chat.ID != chatID || chat.OwnerUserID != ownerID || !chat.BotActive || chat.DialogStartedAt != nil {
+	if chat.ID != chatID || chat.UserID != ownerID || !chat.BotActive || chat.DialogStartedAt != nil {
 		t.Fatalf("generated client decoded the wrong response: %+v", chat)
 	}
 	queue, err := client.ListSupportQueue(context.Background(), ownerID, 20, 0)

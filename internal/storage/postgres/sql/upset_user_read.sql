@@ -1,0 +1,1 @@
+UPDATE chats SET owner_last_read_at = now() WHERE id = $1;

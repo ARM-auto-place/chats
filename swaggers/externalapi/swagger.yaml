@@ -13,6 +13,11 @@ paths:
             description: 'Пагинация назад: before — sent_at,id последнего сообщения; legacy RFC3339 также принимается'
             parameters:
                 - in: query
+                  name: limit
+                  schema:
+                    type: number
+                    format: int
+                - in: query
                   name: chatID
                   schema:
                     type: string
@@ -21,11 +26,6 @@ paths:
                   name: before
                   schema:
                     type: string
-                - in: query
-                  name: limit
-                  schema:
-                    type: number
-                    format: int
                 - in: cookie
                   name: x-user-id
                   required: true
@@ -606,7 +606,7 @@ components:
                 id:
                     type: string
                     format: uuid
-                ownerUserId:
+                userId:
                     type: string
                     format: uuid
         models.ChatListItem:

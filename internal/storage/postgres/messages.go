@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/ARM-auto-place/chats/internal/models"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v4"
 )
@@ -15,25 +16,10 @@ var (
 	ErrBotSilenced  = errors.New("bot silenced")
 )
 
-type MessageRow struct {
-	ID       uuid.UUID
-	ChatID   uuid.UUID
-	SenderID uuid.UUID
-	Text     string
-	SentAt   time.Time
-	IsSystem bool
-}
-
-type MessageCursor struct {
-	SentAt time.Time
-	ID     uuid.UUID
-	HasID  bool
-}
-
 // InsertMessage serializes writes per chat and atomically handles
 // idempotency, participant creation, bot takeover, message persistence and
 // the first-message dialog timestamp.
-func (s *Storage) InsertMessage(
+func (s *storage) InsertMessage(
 	ctx context.Context,
 	chatID uuid.UUID,
 	senderID uuid.UUID,
@@ -41,80 +27,64 @@ func (s *Storage) InsertMessage(
 	text string,
 	isAdmin bool,
 	isBot bool,
-) (MessageRow, bool, error) {
+) (models.MessageRow, bool, error) {
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
-		return MessageRow{}, false, fmt.Errorf("begin insert message transaction: %w", err)
+		return models.MessageRow{}, false, fmt.Errorf("begin insert message transaction: %w", err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
 	var botActive bool
-	if err = tx.QueryRow(ctx, `SELECT bot_active FROM chats WHERE id = $1 FOR UPDATE`, chatID).Scan(&botActive); err != nil {
+	if err = tx.QueryRow(ctx, SqlSelectBotStatus, chatID).Scan(&botActive); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return MessageRow{}, false, ErrChatNotFound
+			return models.MessageRow{}, false, ErrChatNotFound
 		}
-		return MessageRow{}, false, fmt.Errorf("lock chat for message: %w", err)
+		return models.MessageRow{}, false, fmt.Errorf("lock chat for message: %w", err)
 	}
 
-	var existing MessageRow
-	err = tx.QueryRow(ctx, `
-		SELECT id, chat_id, sender_id, text, sent_at, is_system
-		FROM messages
-		WHERE chat_id = $1 AND sender_id = $2 AND client_msg_id = $3
-	`, chatID, senderID, clientMsgID).Scan(
+	var existing models.MessageRow
+	err = tx.QueryRow(ctx, SqlSelectMessageInChat, chatID, senderID, clientMsgID).Scan(
 		&existing.ID, &existing.ChatID, &existing.SenderID, &existing.Text, &existing.SentAt, &existing.IsSystem,
 	)
 	if err == nil {
 		if err = tx.Commit(ctx); err != nil {
-			return MessageRow{}, false, fmt.Errorf("commit duplicate message lookup: %w", err)
+			return models.MessageRow{}, false, fmt.Errorf("commit duplicate message lookup: %w", err)
 		}
 		return existing, false, nil
 	}
 	if !errors.Is(err, pgx.ErrNoRows) {
-		return MessageRow{}, false, fmt.Errorf("lookup duplicate message: %w", err)
+		return models.MessageRow{}, false, fmt.Errorf("lookup duplicate message: %w", err)
 	}
 
 	if isBot && !botActive {
-		return MessageRow{}, false, ErrBotSilenced
+		return models.MessageRow{}, false, ErrBotSilenced
 	}
 
 	if isAdmin || isBot {
-		if _, err = tx.Exec(ctx, `
-			INSERT INTO chat_participants (chat_id, user_id)
-			VALUES ($1, $2)
-			ON CONFLICT (chat_id, user_id) DO NOTHING
-		`, chatID, senderID); err != nil {
-			return MessageRow{}, false, fmt.Errorf("ensure message participant: %w", err)
+		if _, err = tx.Exec(ctx, SqlInsertChatParticipants, chatID, senderID); err != nil {
+			return models.MessageRow{}, false, fmt.Errorf("ensure message participant: %w", err)
 		}
 	}
 
 	if isAdmin {
-		if _, err = tx.Exec(ctx, `UPDATE chats SET bot_active = false WHERE id = $1`, chatID); err != nil {
-			return MessageRow{}, false, fmt.Errorf("silence bot for admin message: %w", err)
+		if _, err = tx.Exec(ctx, sqlUpsetBotStatus, chatID, false); err != nil {
+			return models.MessageRow{}, false, fmt.Errorf("silence bot for admin message: %w", err)
 		}
 	}
 
-	var message MessageRow
-	if err = tx.QueryRow(ctx, `
-		INSERT INTO messages (chat_id, sender_id, client_msg_id, text)
-		VALUES ($1, $2, $3, $4)
-		RETURNING id, chat_id, sender_id, text, sent_at, is_system
-	`, chatID, senderID, clientMsgID, text).Scan(
+	var message models.MessageRow
+	if err = tx.QueryRow(ctx, SqlInsertMessages, chatID, senderID, clientMsgID, text).Scan(
 		&message.ID, &message.ChatID, &message.SenderID, &message.Text, &message.SentAt, &message.IsSystem,
 	); err != nil {
-		return MessageRow{}, false, fmt.Errorf("insert message: %w", err)
+		return models.MessageRow{}, false, fmt.Errorf("insert message: %w", err)
 	}
 
-	if _, err = tx.Exec(ctx, `
-		UPDATE chats
-		SET dialog_started_at = COALESCE(dialog_started_at, $2)
-		WHERE id = $1
-	`, chatID, message.SentAt); err != nil {
-		return MessageRow{}, false, fmt.Errorf("start chat dialog: %w", err)
+	if _, err = tx.Exec(ctx, SqlUpdateDialogStarted, chatID, message.SentAt); err != nil {
+		return models.MessageRow{}, false, fmt.Errorf("start chat dialog: %w", err)
 	}
 
 	if err = tx.Commit(ctx); err != nil {
-		return MessageRow{}, false, fmt.Errorf("commit insert message: %w", err)
+		return models.MessageRow{}, false, fmt.Errorf("commit insert message: %w", err)
 	}
 	return message, true, nil
 }
@@ -126,34 +96,26 @@ func (s *Storage) InsertMessage(
 // client_msg_id, since callers never retry it. It still stamps
 // dialog_started_at so the chat surfaces in the support queue like a real
 // message would.
-func (s *Storage) InsertSystemMessage(ctx context.Context, chatID uuid.UUID, senderID uuid.UUID, text string) (MessageRow, error) {
+func (s *storage) InsertSystemMessage(ctx context.Context, chatID uuid.UUID, senderID uuid.UUID, text string) (models.MessageRow, error) {
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
-		return MessageRow{}, fmt.Errorf("begin insert system message transaction: %w", err)
+		return models.MessageRow{}, fmt.Errorf("begin insert system message transaction: %w", err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
-	var message MessageRow
-	if err = tx.QueryRow(ctx, `
-		INSERT INTO messages (chat_id, sender_id, client_msg_id, text, is_system)
-		VALUES ($1, $2, $3, $4, true)
-		RETURNING id, chat_id, sender_id, text, sent_at, is_system
-	`, chatID, senderID, uuid.New(), text).Scan(
+	var message models.MessageRow
+	if err = tx.QueryRow(ctx, SqlInsertMessagesSystem, chatID, senderID, uuid.New(), text).Scan(
 		&message.ID, &message.ChatID, &message.SenderID, &message.Text, &message.SentAt, &message.IsSystem,
 	); err != nil {
-		return MessageRow{}, fmt.Errorf("insert system message: %w", err)
+		return models.MessageRow{}, fmt.Errorf("insert system message: %w", err)
 	}
 
-	if _, err = tx.Exec(ctx, `
-		UPDATE chats
-		SET dialog_started_at = COALESCE(dialog_started_at, $2)
-		WHERE id = $1
-	`, chatID, message.SentAt); err != nil {
-		return MessageRow{}, fmt.Errorf("start chat dialog for system message: %w", err)
+	if _, err = tx.Exec(ctx, SqlUpdateDialogStarted, chatID, message.SentAt); err != nil {
+		return models.MessageRow{}, fmt.Errorf("start chat dialog for system message: %w", err)
 	}
 
 	if err = tx.Commit(ctx); err != nil {
-		return MessageRow{}, fmt.Errorf("commit insert system message: %w", err)
+		return models.MessageRow{}, fmt.Errorf("commit insert system message: %w", err)
 	}
 	return message, nil
 }
@@ -161,7 +123,7 @@ func (s *Storage) InsertSystemMessage(ctx context.Context, chatID uuid.UUID, sen
 // ListMessages returns up to limit messages older than before (or the newest
 // limit messages if before is nil), newest-first. hasNext is true if there
 // are older messages beyond what's returned.
-func (s *Storage) ListMessages(ctx context.Context, chatID uuid.UUID, before *MessageCursor, limit int) ([]MessageRow, bool, error) {
+func (s *storage) ListMessages(ctx context.Context, chatID uuid.UUID, before *models.MessageCursor, limit int) ([]models.MessageRow, bool, error) {
 	var beforeTime *time.Time
 	var beforeID *uuid.UUID
 	if before != nil {
@@ -170,25 +132,15 @@ func (s *Storage) ListMessages(ctx context.Context, chatID uuid.UUID, before *Me
 			beforeID = &before.ID
 		}
 	}
-	rows, err := s.pool.Query(ctx, `
-			SELECT id, chat_id, sender_id, text, sent_at, is_system FROM messages
-			WHERE chat_id = $1
-			  AND (
-			      $2::timestamptz IS NULL
-			      OR sent_at < $2
-			      OR ($3::uuid IS NOT NULL AND sent_at = $2 AND id < $3)
-			  )
-			ORDER BY sent_at DESC, id DESC
-			LIMIT $4
-		`, chatID, beforeTime, beforeID, limit+1)
+	rows, err := s.pool.Query(ctx, SqlSelectChatList, chatID, beforeTime, beforeID, limit+1)
 	if err != nil {
 		return nil, false, fmt.Errorf("list messages: %w", err)
 	}
 	defer rows.Close()
 
-	messages := make([]MessageRow, 0, limit+1)
+	messages := make([]models.MessageRow, 0, limit+1)
 	for rows.Next() {
-		var m MessageRow
+		var m models.MessageRow
 		if err = rows.Scan(&m.ID, &m.ChatID, &m.SenderID, &m.Text, &m.SentAt, &m.IsSystem); err != nil {
 			return nil, false, fmt.Errorf("scan message: %w", err)
 		}

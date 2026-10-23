@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"strings"
 	"time"
@@ -60,7 +61,7 @@ func (s *service) SendMessage(ctx context.Context, senderUserID uuid.UUID, chatI
 		return models.Message{}, false, customErrors.NotFoundError()
 	}
 
-	isOwner := senderUserID == chat.OwnerUserID
+	isOwner := senderUserID == chat.UserID
 	isBot := senderUserID == BotUserID
 	isAdmin := false
 	if !isOwner && !isBot {
@@ -92,8 +93,47 @@ func (s *service) SendMessage(ctx context.Context, senderUserID uuid.UUID, chatI
 	if isAdmin && chat.BotActive {
 		s.broadcastStageChanged(ctx, chatID, false, StageOperator, senderUserID, row.SentAt)
 	}
+	if isOwner && created && chat.BotActive && s.assistant != nil {
+		s.replyAsBot(ctx, chatID, text)
+	}
 
 	return messageRowToModel(row), created, nil
+}
+
+// replyAsBot asks the assistant in the background and posts its answer as
+// BotUserID. It goes through SendMessage, so an Admin who took the chat over
+// while the assistant was thinking still silences the reply (ErrBotSilenced).
+// ctx is detached from cancellation: the caller is usually a WS worker whose
+// context dies with the connection, but the reply must still land in history.
+func (s *service) replyAsBot(ctx context.Context, chatID uuid.UUID, text string) {
+	ctx = context.WithoutCancel(ctx)
+	s.botReplies.Go(func() {
+		ctx, cancel := context.WithTimeout(ctx, s.assistantTimeout)
+		defer cancel()
+
+		answer, err := s.assistant.Chat(ctx, text, chatID.String())
+		if err != nil {
+			s.logger.Warn().Err(err).Str("chatID", chatID.String()).Str("event", "assistant_chat").Msg("assistant request failed")
+			return
+		}
+
+		msg, created, err := s.SendMessage(ctx, BotUserID, chatID, uuid.New(), answer.Text)
+		if err != nil {
+			s.logger.Warn().Err(err).Str("chatID", chatID.String()).Str("event", "assistant_reply").Msg("assistant reply not posted")
+			return
+		}
+		if !created || s.hub == nil {
+			return
+		}
+		data, err := json.Marshal(models.WSOutgoing{Type: models.WSTypeMessage, ChatID: chatID, Message: &msg})
+		if err != nil {
+			s.logger.Error().Err(err).Str("chatID", chatID.String()).Str("event", "ws_assistant_reply_marshal").Msg("failed to marshal assistant reply frame")
+			return
+		}
+		if err = s.hub.Broadcast(ctx, chatID, data, "message"); err != nil {
+			s.logger.Warn().Err(err).Str("chatID", chatID.String()).Str("event", "ws_assistant_reply_broadcast").Msg("failed to broadcast assistant reply")
+		}
+	})
 }
 
 // MarkChatRead updates the caller's read-receipt: chats.owner_last_read_at
@@ -114,8 +154,8 @@ func (s *service) MarkChatRead(ctx context.Context, userID uuid.UUID, chatID uui
 		return time.Time{}, customErrors.BadRequestError().AddCause("field", "chatID")
 	}
 
-	if userID == chat.OwnerUserID {
-		if err = s.storage.MarkOwnerRead(ctx, chatID); err != nil {
+	if userID == chat.UserID {
+		if err = s.storage.MarkUserRead(ctx, chatID); err != nil {
 			s.logger.Error().Err(err).Str("chatID", chatID.String()).Str("userID", userID.String()).Str("event", "owner_mark_read").Msg("chat persistence failed")
 			return time.Time{}, customErrors.InternalServerError().SetOuterError(err)
 		}

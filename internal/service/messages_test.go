@@ -11,14 +11,15 @@ import (
 	"github.com/rs/zerolog"
 
 	customErrors "github.com/ARM-auto-place/chats/internal/errors"
+	"github.com/ARM-auto-place/chats/internal/models"
 	"github.com/ARM-auto-place/chats/internal/storage/postgres"
-	"github.com/ARM-auto-place/chats/pkg/models"
+	pkgModels "github.com/ARM-auto-place/chats/pkg/models"
 )
 
 func TestSendMessage_OwnerCanAlwaysSend(t *testing.T) {
 	chatID := uuid.New()
 	ownerID := uuid.New()
-	storage := &fakeStorage{chat: postgres.ChatRow{ID: chatID, OwnerUserID: ownerID, BotActive: true}, chatFound: true}
+	storage := &fakeStorage{chat: models.ChatRow{ID: chatID, UserID: ownerID, BotActive: true}, chatFound: true}
 	svc := New(zerolog.Nop(), storage, fakeAccess{allow: false}, nil)
 
 	_, _, err := svc.SendMessage(context.Background(), ownerID, chatID, uuid.New(), "hi")
@@ -29,7 +30,7 @@ func TestSendMessage_OwnerCanAlwaysSend(t *testing.T) {
 
 func TestSendMessage_AdminCanSendAndSilencesBot(t *testing.T) {
 	chatID := uuid.New()
-	storage := &fakeStorage{chat: postgres.ChatRow{ID: chatID, OwnerUserID: uuid.New(), BotActive: true}, chatFound: true}
+	storage := &fakeStorage{chat: models.ChatRow{ID: chatID, UserID: uuid.New(), BotActive: true}, chatFound: true}
 	svc := New(zerolog.Nop(), storage, fakeAccess{allow: true}, nil)
 
 	_, _, err := svc.SendMessage(context.Background(), uuid.New(), chatID, uuid.New(), "hi from support")
@@ -43,7 +44,7 @@ func TestSendMessage_AdminCanSendAndSilencesBot(t *testing.T) {
 
 func TestSendMessage_AdminAutoSilence_BroadcastsStageChanged(t *testing.T) {
 	chatID := uuid.New()
-	storage := &fakeStorage{chat: postgres.ChatRow{ID: chatID, OwnerUserID: uuid.New(), BotActive: true}, chatFound: true}
+	storage := &fakeStorage{chat: models.ChatRow{ID: chatID, UserID: uuid.New(), BotActive: true}, chatFound: true}
 	hub := &fakeBroadcaster{}
 	svc := New(zerolog.Nop(), storage, fakeAccess{allow: true}, hub)
 
@@ -54,11 +55,11 @@ func TestSendMessage_AdminAutoSilence_BroadcastsStageChanged(t *testing.T) {
 	if len(hub.frames) != 1 || hub.chatIDs[0] != chatID {
 		t.Fatalf("expected one stage_changed broadcast on admin takeover, got %d", len(hub.frames))
 	}
-	var out models.WSOutgoing
+	var out pkgModels.WSOutgoing
 	if err := json.Unmarshal(hub.frames[0], &out); err != nil {
 		t.Fatalf("failed to decode broadcast: %v", err)
 	}
-	if out.Type != models.WSTypeStageChanged {
+	if out.Type != pkgModels.WSTypeStageChanged {
 		t.Fatalf("expected stage_changed frame, got %+v", out)
 	}
 }
@@ -67,7 +68,7 @@ func TestSendMessage_AdminSecondMessage_NoDuplicateBroadcast(t *testing.T) {
 	chatID := uuid.New()
 	// bot_active already false: the chat's already-taken-over state, so a
 	// second Admin message must not re-broadcast a stage change.
-	storage := &fakeStorage{chat: postgres.ChatRow{ID: chatID, OwnerUserID: uuid.New(), BotActive: false}, chatFound: true}
+	storage := &fakeStorage{chat: models.ChatRow{ID: chatID, UserID: uuid.New(), BotActive: false}, chatFound: true}
 	hub := &fakeBroadcaster{}
 	svc := New(zerolog.Nop(), storage, fakeAccess{allow: true}, hub)
 
@@ -82,7 +83,7 @@ func TestSendMessage_AdminSecondMessage_NoDuplicateBroadcast(t *testing.T) {
 
 func TestSendMessage_BotBlockedWhenNotActive(t *testing.T) {
 	chatID := uuid.New()
-	storage := &fakeStorage{chat: postgres.ChatRow{ID: chatID, OwnerUserID: uuid.New(), BotActive: false}, chatFound: true}
+	storage := &fakeStorage{chat: models.ChatRow{ID: chatID, UserID: uuid.New(), BotActive: false}, chatFound: true}
 	svc := New(zerolog.Nop(), storage, fakeAccess{allow: false}, nil)
 
 	storage.insertErr = postgres.ErrBotSilenced
@@ -95,7 +96,7 @@ func TestSendMessage_BotBlockedWhenNotActive(t *testing.T) {
 
 func TestSendMessage_BotAllowedWhenActive(t *testing.T) {
 	chatID := uuid.New()
-	storage := &fakeStorage{chat: postgres.ChatRow{ID: chatID, OwnerUserID: uuid.New(), BotActive: true}, chatFound: true}
+	storage := &fakeStorage{chat: models.ChatRow{ID: chatID, UserID: uuid.New(), BotActive: true}, chatFound: true}
 	svc := New(zerolog.Nop(), storage, fakeAccess{allow: false}, nil)
 
 	_, _, err := svc.SendMessage(context.Background(), BotUserID, chatID, uuid.New(), "hello, need help?")
@@ -109,7 +110,7 @@ func TestSendMessage_BotAllowedWhenActive(t *testing.T) {
 
 func TestSendMessage_ClientMessageIDRequired(t *testing.T) {
 	chatID, ownerID := uuid.New(), uuid.New()
-	storage := &fakeStorage{chat: postgres.ChatRow{ID: chatID, OwnerUserID: ownerID}, chatFound: true}
+	storage := &fakeStorage{chat: models.ChatRow{ID: chatID, UserID: ownerID}, chatFound: true}
 	svc := New(zerolog.Nop(), storage, fakeAccess{}, nil)
 	_, _, err := svc.SendMessage(context.Background(), ownerID, chatID, uuid.Nil, "hi")
 	var customErr *customErrors.Error
@@ -120,7 +121,7 @@ func TestSendMessage_ClientMessageIDRequired(t *testing.T) {
 
 func TestSendMessage_StrangerForbidden(t *testing.T) {
 	chatID := uuid.New()
-	storage := &fakeStorage{chat: postgres.ChatRow{ID: chatID, OwnerUserID: uuid.New(), BotActive: true}, chatFound: true}
+	storage := &fakeStorage{chat: models.ChatRow{ID: chatID, UserID: uuid.New(), BotActive: true}, chatFound: true}
 	svc := New(zerolog.Nop(), storage, fakeAccess{allow: false}, nil)
 
 	_, _, err := svc.SendMessage(context.Background(), uuid.New(), chatID, uuid.New(), "hi")
@@ -133,7 +134,7 @@ func TestSendMessage_StrangerForbidden(t *testing.T) {
 func TestSendMessage_EmptyTextRejected(t *testing.T) {
 	chatID := uuid.New()
 	ownerID := uuid.New()
-	storage := &fakeStorage{chat: postgres.ChatRow{ID: chatID, OwnerUserID: ownerID, BotActive: true}, chatFound: true}
+	storage := &fakeStorage{chat: models.ChatRow{ID: chatID, UserID: ownerID, BotActive: true}, chatFound: true}
 	svc := New(zerolog.Nop(), storage, fakeAccess{allow: false}, nil)
 
 	_, _, err := svc.SendMessage(context.Background(), ownerID, chatID, uuid.New(), "   ")
@@ -146,7 +147,7 @@ func TestSendMessage_EmptyTextRejected(t *testing.T) {
 func TestMarkChatRead_Owner(t *testing.T) {
 	chatID := uuid.New()
 	ownerID := uuid.New()
-	storage := &fakeStorage{chat: postgres.ChatRow{ID: chatID, OwnerUserID: ownerID}, chatFound: true}
+	storage := &fakeStorage{chat: models.ChatRow{ID: chatID, UserID: ownerID}, chatFound: true}
 	svc := New(zerolog.Nop(), storage, fakeAccess{}, nil)
 
 	readAt, err := svc.MarkChatRead(context.Background(), ownerID, chatID)
@@ -160,7 +161,7 @@ func TestMarkChatRead_Owner(t *testing.T) {
 
 func TestMarkChatRead_AdminUsesParticipantUpsert(t *testing.T) {
 	chatID := uuid.New()
-	storage := &fakeStorage{chat: postgres.ChatRow{ID: chatID, OwnerUserID: uuid.New()}, chatFound: true}
+	storage := &fakeStorage{chat: models.ChatRow{ID: chatID, UserID: uuid.New()}, chatFound: true}
 	svc := New(zerolog.Nop(), storage, fakeAccess{allow: true}, nil)
 
 	_, err := svc.MarkChatRead(context.Background(), uuid.New(), chatID)
@@ -171,7 +172,7 @@ func TestMarkChatRead_AdminUsesParticipantUpsert(t *testing.T) {
 
 func TestMarkChatRead_Bot(t *testing.T) {
 	chatID := uuid.New()
-	storage := &fakeStorage{chat: postgres.ChatRow{ID: chatID, OwnerUserID: uuid.New()}, chatFound: true}
+	storage := &fakeStorage{chat: models.ChatRow{ID: chatID, UserID: uuid.New()}, chatFound: true}
 	// fakeAccess.err forces CheckAccess to fail if it is ever invoked - this
 	// proves MarkChatRead short-circuits on BotUserID before calling isAdmin,
 	// mirroring SendMessage's bot-check-before-isAdmin pattern.
@@ -188,7 +189,7 @@ func TestMarkChatRead_Bot(t *testing.T) {
 
 func TestMarkChatRead_StrangerForbidden(t *testing.T) {
 	chatID := uuid.New()
-	storage := &fakeStorage{chat: postgres.ChatRow{ID: chatID, OwnerUserID: uuid.New()}, chatFound: true}
+	storage := &fakeStorage{chat: models.ChatRow{ID: chatID, UserID: uuid.New()}, chatFound: true}
 	svc := New(zerolog.Nop(), storage, fakeAccess{allow: false}, nil)
 
 	_, err := svc.MarkChatRead(context.Background(), uuid.New(), chatID)

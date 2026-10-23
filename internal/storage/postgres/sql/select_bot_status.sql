@@ -1,0 +1,1 @@
+SELECT bot_active FROM chats WHERE id = $1 FOR UPDATE;

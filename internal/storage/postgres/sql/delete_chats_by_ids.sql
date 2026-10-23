@@ -1,0 +1,1 @@
+DELETE FROM messages WHERE chat_id = ANY($1::uuid[]);

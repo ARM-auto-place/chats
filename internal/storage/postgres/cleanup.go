@@ -13,19 +13,14 @@ import (
 // timer are cleared, and bot_active resets to true so the bot can speak again
 // on the next dialog. Returns the IDs of the chats reset (nil if none were
 // due), so the caller can notify their WS subscribers.
-func (s *Storage) CleanupExpiredDialogs(ctx context.Context) ([]uuid.UUID, error) {
+func (s *storage) CleanupExpiredDialogs(ctx context.Context) ([]uuid.UUID, error) {
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("begin cleanup expired dialogs: %w", err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
-	rows, err := tx.Query(ctx, `
-		SELECT id FROM chats
-		WHERE dialog_started_at IS NOT NULL
-		  AND dialog_started_at < now() - INTERVAL '24 hours'
-		FOR UPDATE
-	`)
+	rows, err := tx.Query(ctx, SqlSelectChatByDialogStarteg)
 	if err != nil {
 		return nil, fmt.Errorf("lock expired dialogs: %w", err)
 	}
@@ -45,10 +40,10 @@ func (s *Storage) CleanupExpiredDialogs(ctx context.Context) ([]uuid.UUID, error
 	rows.Close()
 
 	if len(ids) > 0 {
-		if _, err = tx.Exec(ctx, `DELETE FROM messages WHERE chat_id = ANY($1::uuid[])`, ids); err != nil {
+		if _, err = tx.Exec(ctx, SqlDeleteChatsByIds, ids); err != nil {
 			return nil, fmt.Errorf("delete expired dialog messages: %w", err)
 		}
-		if _, err = tx.Exec(ctx, `UPDATE chats SET dialog_started_at = NULL, bot_active = true WHERE id = ANY($1::uuid[])`, ids); err != nil {
+		if _, err = tx.Exec(ctx, SqlUpdateChatsDialogByIDs, ids); err != nil {
 			return nil, fmt.Errorf("reset expired dialogs: %w", err)
 		}
 	}

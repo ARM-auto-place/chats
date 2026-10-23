@@ -18,7 +18,11 @@ type Config struct {
 	PGPassword string
 	BindAddr   string
 	AccessURL  string
-	WS         WSConfig
+	// AssistantURL is assistant_bot's JSON-RPC endpoint (…/rpc). Empty
+	// disables bot replies.
+	AssistantURL     string
+	AssistantTimeout time.Duration
+	WS               WSConfig
 }
 
 // WSConfig holds the websocket client and hub tuning knobs — see
@@ -49,13 +53,15 @@ type WSHubConfig struct {
 
 func LoadConfig() Config {
 	cfg := Config{
-		PGHost:     GetEnv("PG_HOST", "localhost"),
-		PGPort:     GetEnv("PG_PORT", "5432"),
-		PGDB:       os.Getenv("PG_DB"),
-		PGUser:     os.Getenv("PG_USER"),
-		PGPassword: os.Getenv("PG_PASSWORD"),
-		BindAddr:   GetEnv("BIND_ADDR", ":8086"),
-		AccessURL:  os.Getenv("ACCESS_URL"),
+		PGHost:           GetEnv("PG_HOST", "localhost"),
+		PGPort:           GetEnv("PG_PORT", "5432"),
+		PGDB:             os.Getenv("PG_DB"),
+		PGUser:           os.Getenv("PG_USER"),
+		PGPassword:       os.Getenv("PG_PASSWORD"),
+		BindAddr:         GetEnv("BIND_ADDR", ":8086"),
+		AccessURL:        os.Getenv("ACCESS_URL"),
+		AssistantURL:     os.Getenv("ASSISTANT_URL"),
+		AssistantTimeout: GetEnvDuration("ASSISTANT_TIMEOUT", 30*time.Second),
 		WS: WSConfig{
 			WSClient: WSClientConfig{
 				WriteWait:            GetEnvDuration("WS_WRITE_WAIT", 10*time.Second),

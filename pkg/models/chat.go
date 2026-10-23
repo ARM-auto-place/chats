@@ -8,7 +8,7 @@ import (
 
 type Chat struct {
 	ID              uuid.UUID  `json:"id"`
-	OwnerUserID     uuid.UUID  `json:"ownerUserId"`
+	UserID          uuid.UUID  `json:"userId"`
 	DialogStartedAt *time.Time `json:"dialogStartedAt"`
 	BotActive       bool       `json:"botActive"`
 	CreatedAt       time.Time  `json:"createdAt"`

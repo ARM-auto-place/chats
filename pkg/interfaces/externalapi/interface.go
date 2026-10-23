@@ -5,7 +5,6 @@
 // @tg servers=
 //
 //go:generate tg transport --services . --out ../../../internal/transport/jsonRPC/externalapi --outSwagger ../../../swaggers/externalapi/swagger.yaml
-//go:generate go run ../../../internal/genswagger ../../../swaggers/externalapi/swagger.yaml
 //go:generate tg client --services . --outPath ../../client/transport -go
 package externalapi
 

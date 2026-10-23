@@ -7,15 +7,28 @@ import (
 	"time"
 
 	"github.com/ARM-auto-place/chats/internal/config"
+	"github.com/ARM-auto-place/chats/internal/models"
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v4/pgxpool"
 )
 
-type Storage struct {
+type Storage interface {
+	GetOrCreateChatByOwner(ctx context.Context, ownerUserID uuid.UUID) (models.ChatRow, error)
+	GetChatByID(ctx context.Context, chatID uuid.UUID) (models.ChatRow, bool, error)
+	ListQueue(ctx context.Context, viewerUserID uuid.UUID, limit int, offset int) ([]models.ChatListRow, int, error)
+	SetBotActive(ctx context.Context, chatID uuid.UUID, active bool) error
+	MarkUserRead(ctx context.Context, chatID uuid.UUID) error
+	UpsertParticipantRead(ctx context.Context, chatID uuid.UUID, userID uuid.UUID) error
+	InsertMessage(ctx context.Context, chatID uuid.UUID, senderID uuid.UUID, clientMsgID uuid.UUID, text string, isAdmin bool, isBot bool) (models.MessageRow, bool, error)
+	InsertSystemMessage(ctx context.Context, chatID uuid.UUID, senderID uuid.UUID, text string) (models.MessageRow, error)
+	ListMessages(ctx context.Context, chatID uuid.UUID, before *models.MessageCursor, limit int) ([]models.MessageRow, bool, error)
+}
+type storage struct {
 	pool *pgxpool.Pool
 }
 
-func New(pool *pgxpool.Pool) *Storage {
-	return &Storage{pool: pool}
+func New(pool *pgxpool.Pool) Storage {
+	return &storage{pool: pool}
 }
 
 func NewPool(cfg config.Config) (*pgxpool.Pool, error) {

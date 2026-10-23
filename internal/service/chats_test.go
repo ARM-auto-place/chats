@@ -11,24 +11,24 @@ import (
 	"github.com/rs/zerolog"
 
 	customErrors "github.com/ARM-auto-place/chats/internal/errors"
-	"github.com/ARM-auto-place/chats/internal/storage/postgres"
+	internalModels "github.com/ARM-auto-place/chats/internal/models"
 	"github.com/ARM-auto-place/chats/pkg/models"
 )
 
 // fakeStorage is a minimal in-memory Storage fake shared by this file's
 // tests. Only the fields/methods a given test needs are populated.
 type fakeStorage struct {
-	chat              postgres.ChatRow
+	chat              internalModels.ChatRow
 	chatFound         bool
-	queueRows         []postgres.ChatListRow
+	queueRows         []internalModels.ChatListRow
 	queueTotal        int
-	messages          []postgres.MessageRow
+	messages          []internalModels.MessageRow
 	messagesNext      bool
 	messageCreated    bool
 	insertIsAdmin     bool
 	insertIsBot       bool
 	insertClientMsgID uuid.UUID
-	listCursor        *postgres.MessageCursor
+	listCursor        *internalModels.MessageCursor
 	listOffset        int
 	err               error
 	insertErr         error
@@ -37,13 +37,13 @@ type fakeStorage struct {
 	systemMessageErr  error
 }
 
-func (f *fakeStorage) GetOrCreateChatByOwner(context.Context, uuid.UUID) (postgres.ChatRow, error) {
+func (f *fakeStorage) GetOrCreateChatByOwner(context.Context, uuid.UUID) (internalModels.ChatRow, error) {
 	return f.chat, f.err
 }
-func (f *fakeStorage) GetChatByID(context.Context, uuid.UUID) (postgres.ChatRow, bool, error) {
+func (f *fakeStorage) GetChatByID(context.Context, uuid.UUID) (internalModels.ChatRow, bool, error) {
 	return f.chat, f.chatFound, f.err
 }
-func (f *fakeStorage) ListQueue(_ context.Context, _ uuid.UUID, _ int, offset int) ([]postgres.ChatListRow, int, error) {
+func (f *fakeStorage) ListQueue(_ context.Context, _ uuid.UUID, _ int, offset int) ([]internalModels.ChatListRow, int, error) {
 	f.listOffset = offset
 	return f.queueRows, f.queueTotal, f.err
 }
@@ -51,23 +51,23 @@ func (f *fakeStorage) SetBotActive(_ context.Context, _ uuid.UUID, active bool) 
 	f.setBotActiveCalls = append(f.setBotActiveCalls, active)
 	return f.err
 }
-func (f *fakeStorage) MarkOwnerRead(context.Context, uuid.UUID) error { return f.err }
+func (f *fakeStorage) MarkUserRead(context.Context, uuid.UUID) error { return f.err }
 func (f *fakeStorage) UpsertParticipantRead(context.Context, uuid.UUID, uuid.UUID) error {
 	return f.err
 }
-func (f *fakeStorage) InsertMessage(_ context.Context, _ uuid.UUID, _ uuid.UUID, clientMsgID uuid.UUID, _ string, isAdmin bool, isBot bool) (postgres.MessageRow, bool, error) {
+func (f *fakeStorage) InsertMessage(_ context.Context, _ uuid.UUID, _ uuid.UUID, clientMsgID uuid.UUID, _ string, isAdmin bool, isBot bool) (internalModels.MessageRow, bool, error) {
 	f.insertClientMsgID = clientMsgID
 	f.insertIsAdmin = isAdmin
 	f.insertIsBot = isBot
-	return postgres.MessageRow{}, f.messageCreated, f.insertErr
+	return internalModels.MessageRow{}, f.messageCreated, f.insertErr
 }
-func (f *fakeStorage) ListMessages(_ context.Context, _ uuid.UUID, cursor *postgres.MessageCursor, _ int) ([]postgres.MessageRow, bool, error) {
+func (f *fakeStorage) ListMessages(_ context.Context, _ uuid.UUID, cursor *internalModels.MessageCursor, _ int) ([]internalModels.MessageRow, bool, error) {
 	f.listCursor = cursor
 	return f.messages, f.messagesNext, f.err
 }
-func (f *fakeStorage) InsertSystemMessage(_ context.Context, _ uuid.UUID, _ uuid.UUID, text string) (postgres.MessageRow, error) {
+func (f *fakeStorage) InsertSystemMessage(_ context.Context, _ uuid.UUID, _ uuid.UUID, text string) (internalModels.MessageRow, error) {
 	f.systemMessages = append(f.systemMessages, text)
-	return postgres.MessageRow{Text: text, IsSystem: true}, f.systemMessageErr
+	return internalModels.MessageRow{Text: text, IsSystem: true}, f.systemMessageErr
 }
 
 func TestListSupportQueue_NegativeOffsetRejected(t *testing.T) {
@@ -82,7 +82,7 @@ func TestListSupportQueue_NegativeOffsetRejected(t *testing.T) {
 
 func TestGetMessages_CompositeCursor(t *testing.T) {
 	chatID, ownerID, cursorID := uuid.New(), uuid.New(), uuid.New()
-	storage := &fakeStorage{chat: postgres.ChatRow{ID: chatID, OwnerUserID: ownerID}, chatFound: true}
+	storage := &fakeStorage{chat: internalModels.ChatRow{ID: chatID, UserID: ownerID}, chatFound: true}
 	svc := New(zerolog.Nop(), storage, fakeAccess{}, nil)
 	timestamp := time.Now().UTC().Truncate(time.Microsecond)
 	_, err := svc.GetMessages(context.Background(), ownerID, chatID, timestamp.Format(time.RFC3339Nano)+","+cursorID.String(), 10)
@@ -106,14 +106,14 @@ func (f fakeAccess) CheckAccess(context.Context, uuid.UUID, int) (bool, error) {
 func TestGetOrCreateSupportChat_ReturnsMappedChat(t *testing.T) {
 	chatID := uuid.New()
 	ownerID := uuid.New()
-	storage := &fakeStorage{chat: postgres.ChatRow{ID: chatID, OwnerUserID: ownerID, BotActive: true, CreatedAt: time.Now()}}
+	storage := &fakeStorage{chat: internalModels.ChatRow{ID: chatID, UserID: ownerID, BotActive: true, CreatedAt: time.Now()}}
 	svc := New(zerolog.Nop(), storage, fakeAccess{}, nil)
 
 	got, err := svc.GetOrCreateSupportChat(context.Background(), ownerID)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if got.ID != chatID || got.OwnerUserID != ownerID || !got.BotActive {
+	if got.ID != chatID || got.UserID != ownerID || !got.BotActive {
 		t.Fatalf("unexpected chat: %+v", got)
 	}
 }
@@ -140,7 +140,7 @@ func TestListSupportQueue_NonAdminForbidden(t *testing.T) {
 
 func TestListSupportQueue_AdminAllowed_ComputesHasNext(t *testing.T) {
 	storage := &fakeStorage{
-		queueRows:  []postgres.ChatListRow{{ChatRow: postgres.ChatRow{ID: uuid.New()}}},
+		queueRows:  []internalModels.ChatListRow{{ChatRow: internalModels.ChatRow{ID: uuid.New()}}},
 		queueTotal: 5,
 	}
 	svc := New(zerolog.Nop(), storage, fakeAccess{allow: true}, nil)
@@ -163,10 +163,10 @@ func TestGetMessages_OwnerAllowed_ChronologicalOrder(t *testing.T) {
 	newer := time.Now()
 	older := newer.Add(-time.Minute)
 	storage := &fakeStorage{
-		chat:      postgres.ChatRow{ID: chatID, OwnerUserID: ownerID},
+		chat:      internalModels.ChatRow{ID: chatID, UserID: ownerID},
 		chatFound: true,
 		// storage returns newest-first, as documented on ListMessages.
-		messages: []postgres.MessageRow{
+		messages: []internalModels.MessageRow{
 			{ID: uuid.New(), Text: "second", SentAt: newer},
 			{ID: uuid.New(), Text: "first", SentAt: older},
 		},
@@ -184,7 +184,7 @@ func TestGetMessages_OwnerAllowed_ChronologicalOrder(t *testing.T) {
 
 func TestGetMessages_NonOwnerNonAdminForbidden(t *testing.T) {
 	chatID := uuid.New()
-	storage := &fakeStorage{chat: postgres.ChatRow{ID: chatID, OwnerUserID: uuid.New()}, chatFound: true}
+	storage := &fakeStorage{chat: internalModels.ChatRow{ID: chatID, UserID: uuid.New()}, chatFound: true}
 	svc := New(zerolog.Nop(), storage, fakeAccess{allow: false}, nil)
 
 	_, err := svc.GetMessages(context.Background(), uuid.New(), chatID, "", 10)
@@ -207,7 +207,7 @@ func TestGetMessages_ChatNotFound(t *testing.T) {
 
 func TestGetMessages_InvalidCursorRejectedBeforeStorage(t *testing.T) {
 	chatID, ownerID := uuid.New(), uuid.New()
-	storage := &fakeStorage{chat: postgres.ChatRow{ID: chatID, OwnerUserID: ownerID}, chatFound: true}
+	storage := &fakeStorage{chat: internalModels.ChatRow{ID: chatID, UserID: ownerID}, chatFound: true}
 	svc := New(zerolog.Nop(), storage, fakeAccess{}, nil)
 	_, err := svc.GetMessages(context.Background(), ownerID, chatID, "broken", 10)
 	var customErr *customErrors.Error
@@ -218,7 +218,7 @@ func TestGetMessages_InvalidCursorRejectedBeforeStorage(t *testing.T) {
 
 func TestSetChatStage_OwnerRequestsOperator(t *testing.T) {
 	chatID, ownerID := uuid.New(), uuid.New()
-	storage := &fakeStorage{chat: postgres.ChatRow{ID: chatID, OwnerUserID: ownerID, BotActive: true}, chatFound: true}
+	storage := &fakeStorage{chat: internalModels.ChatRow{ID: chatID, UserID: ownerID, BotActive: true}, chatFound: true}
 	svc := New(zerolog.Nop(), storage, fakeAccess{allow: false}, nil)
 
 	got, err := svc.SetChatStage(context.Background(), ownerID, chatID, StageOperator)
@@ -238,7 +238,7 @@ func TestSetChatStage_OwnerRequestsOperator(t *testing.T) {
 
 func TestSetChatStage_AdminReturnsToBot(t *testing.T) {
 	chatID := uuid.New()
-	storage := &fakeStorage{chat: postgres.ChatRow{ID: chatID, OwnerUserID: uuid.New(), BotActive: false}, chatFound: true}
+	storage := &fakeStorage{chat: internalModels.ChatRow{ID: chatID, UserID: uuid.New(), BotActive: false}, chatFound: true}
 	svc := New(zerolog.Nop(), storage, fakeAccess{allow: true}, nil)
 
 	got, err := svc.SetChatStage(context.Background(), uuid.New(), chatID, StageBot)
@@ -255,7 +255,7 @@ func TestSetChatStage_AdminReturnsToBot(t *testing.T) {
 
 func TestSetChatStage_NoopWhenAlreadyInStage(t *testing.T) {
 	chatID, ownerID := uuid.New(), uuid.New()
-	storage := &fakeStorage{chat: postgres.ChatRow{ID: chatID, OwnerUserID: ownerID, BotActive: false}, chatFound: true}
+	storage := &fakeStorage{chat: internalModels.ChatRow{ID: chatID, UserID: ownerID, BotActive: false}, chatFound: true}
 	svc := New(zerolog.Nop(), storage, fakeAccess{}, nil)
 
 	_, err := svc.SetChatStage(context.Background(), ownerID, chatID, StageOperator)
@@ -269,7 +269,7 @@ func TestSetChatStage_NoopWhenAlreadyInStage(t *testing.T) {
 
 func TestSetChatStage_InvalidStageRejected(t *testing.T) {
 	chatID, ownerID := uuid.New(), uuid.New()
-	storage := &fakeStorage{chat: postgres.ChatRow{ID: chatID, OwnerUserID: ownerID}, chatFound: true}
+	storage := &fakeStorage{chat: internalModels.ChatRow{ID: chatID, UserID: ownerID}, chatFound: true}
 	svc := New(zerolog.Nop(), storage, fakeAccess{}, nil)
 
 	_, err := svc.SetChatStage(context.Background(), ownerID, chatID, "confused")
@@ -281,7 +281,7 @@ func TestSetChatStage_InvalidStageRejected(t *testing.T) {
 
 func TestSetChatStage_StrangerForbidden(t *testing.T) {
 	chatID := uuid.New()
-	storage := &fakeStorage{chat: postgres.ChatRow{ID: chatID, OwnerUserID: uuid.New(), BotActive: true}, chatFound: true}
+	storage := &fakeStorage{chat: internalModels.ChatRow{ID: chatID, UserID: uuid.New(), BotActive: true}, chatFound: true}
 	svc := New(zerolog.Nop(), storage, fakeAccess{allow: false}, nil)
 
 	_, err := svc.SetChatStage(context.Background(), uuid.New(), chatID, StageOperator)
@@ -304,7 +304,7 @@ func TestSetChatStage_ChatNotFound(t *testing.T) {
 
 func TestSetChatStage_BroadcastsStageChangedToSubscribers(t *testing.T) {
 	chatID, ownerID := uuid.New(), uuid.New()
-	storage := &fakeStorage{chat: postgres.ChatRow{ID: chatID, OwnerUserID: ownerID, BotActive: true}, chatFound: true}
+	storage := &fakeStorage{chat: internalModels.ChatRow{ID: chatID, UserID: ownerID, BotActive: true}, chatFound: true}
 	hub := &fakeBroadcaster{}
 	svc := New(zerolog.Nop(), storage, fakeAccess{}, hub)
 

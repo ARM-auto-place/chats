@@ -46,15 +46,6 @@ func (http *httpChatAPI) serveListSupportQueue(ctx *fiber.Ctx) (err error) {
 
 	var request requestChatAPIListSupportQueue
 
-	if _offset := ctx.Query("offset"); _offset != "" {
-		var offset int
-		offset, err = strconv.Atoi(_offset)
-		if err != nil {
-			ctx.Status(fiber.StatusBadRequest)
-			return sendResponse(ctx, "url arguments could not be decoded: "+err.Error())
-		}
-		request.Offset = offset
-	}
 	if _limit := ctx.Query("limit"); _limit != "" {
 		var limit int
 		limit, err = strconv.Atoi(_limit)
@@ -63,6 +54,15 @@ func (http *httpChatAPI) serveListSupportQueue(ctx *fiber.Ctx) (err error) {
 			return sendResponse(ctx, "url arguments could not be decoded: "+err.Error())
 		}
 		request.Limit = limit
+	}
+	if _offset := ctx.Query("offset"); _offset != "" {
+		var offset int
+		offset, err = strconv.Atoi(_offset)
+		if err != nil {
+			ctx.Status(fiber.StatusBadRequest)
+			return sendResponse(ctx, "url arguments could not be decoded: "+err.Error())
+		}
+		request.Offset = offset
 	}
 
 	if _userID := ctx.Cookies("x-user-id"); _userID != "" {
@@ -157,15 +157,15 @@ func (http *httpChatAPI) serveSetChatStage(ctx *fiber.Ctx) (err error) {
 
 	var request requestChatAPISetChatStage
 
-	if _chatID := ctx.Query("chatID"); _chatID != "" {
-		var chatID uuid.UUID
-		chatID, _ = uuid.Parse(_chatID)
-		request.ChatID = chatID
-	}
 	if _stage := ctx.Query("stage"); _stage != "" {
 		var stage string
 		stage = _stage
 		request.Stage = stage
+	}
+	if _chatID := ctx.Query("chatID"); _chatID != "" {
+		var chatID uuid.UUID
+		chatID, _ = uuid.Parse(_chatID)
+		request.ChatID = chatID
 	}
 
 	if _userID := ctx.Cookies("x-user-id"); _userID != "" {

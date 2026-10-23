@@ -253,7 +253,7 @@ func TestGetChatByID_NotFound(t *testing.T) {
 	}
 }
 
-func TestSetBotActive_And_MarkOwnerRead(t *testing.T) {
+func TestSetBotActive_And_MarkUserRead(t *testing.T) {
 	pool := testPool(t)
 	defer pool.Close()
 	ctx := context.Background()
@@ -273,7 +273,7 @@ func TestSetBotActive_And_MarkOwnerRead(t *testing.T) {
 	if err = storage.SetBotActive(ctx, chat.ID, false); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if err = storage.MarkOwnerRead(ctx, chat.ID); err != nil {
+	if err = storage.MarkUserRead(ctx, chat.ID); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 

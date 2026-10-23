@@ -9,7 +9,7 @@ import (
 	"github.com/google/uuid"
 
 	customErrors "github.com/ARM-auto-place/chats/internal/errors"
-	"github.com/ARM-auto-place/chats/internal/storage/postgres"
+	internalModels "github.com/ARM-auto-place/chats/internal/models"
 	"github.com/ARM-auto-place/chats/pkg/models"
 )
 
@@ -18,17 +18,17 @@ const (
 	StageBot      = "bot"
 )
 
-func chatRowToModel(r postgres.ChatRow) models.Chat {
+func chatRowToModel(r internalModels.ChatRow) models.Chat {
 	return models.Chat{
 		ID:              r.ID,
-		OwnerUserID:     r.OwnerUserID,
+		UserID:          r.UserID,
 		DialogStartedAt: r.DialogStartedAt,
 		BotActive:       r.BotActive,
 		CreatedAt:       r.CreatedAt,
 	}
 }
 
-func messageRowToModel(r postgres.MessageRow) models.Message {
+func messageRowToModel(r internalModels.MessageRow) models.Message {
 	return models.Message{ID: r.ID, ChatID: r.ChatID, SenderID: r.SenderID, Text: r.Text, SentAt: r.SentAt, IsSystem: r.IsSystem}
 }
 
@@ -83,13 +83,13 @@ func (s *service) GetMessages(ctx context.Context, userID uuid.UUID, chatID uuid
 	if !found {
 		return models.MessagesResponse{}, customErrors.BadRequestError().AddCause("field", "chatID")
 	}
-	if userID != chat.OwnerUserID {
+	if userID != chat.UserID {
 		if err = s.checkAdminAccess(ctx, userID); err != nil {
 			return models.MessagesResponse{}, err
 		}
 	}
 
-	var cursor *postgres.MessageCursor
+	var cursor *internalModels.MessageCursor
 	if before != "" {
 		parts := strings.Split(before, ",")
 		if len(parts) > 2 {
@@ -99,7 +99,7 @@ func (s *service) GetMessages(ctx context.Context, userID uuid.UUID, chatID uuid
 		if parseErr != nil {
 			return models.MessagesResponse{}, customErrors.BadRequestError().AddCause("field", "before")
 		}
-		cursor = &postgres.MessageCursor{SentAt: t}
+		cursor = &internalModels.MessageCursor{SentAt: t}
 		if len(parts) == 2 {
 			id, idErr := uuid.Parse(parts[1])
 			if idErr != nil || id == uuid.Nil {
@@ -162,7 +162,7 @@ func (s *service) SetChatStage(ctx context.Context, userID uuid.UUID, chatID uui
 	if !found {
 		return models.Chat{}, customErrors.BadRequestError().AddCause("field", "chatID")
 	}
-	if userID != chat.OwnerUserID {
+	if userID != chat.UserID {
 		if err = s.checkAdminAccess(ctx, userID); err != nil {
 			return models.Chat{}, err
 		}
